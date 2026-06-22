@@ -246,6 +246,18 @@ button {
 
 .danger-btn:hover { background: rgba(239, 68, 68, 0.2); }
 
+.danger-btn.wipeout {
+    background: rgba(220, 38, 38, 0.8);
+    color: white;
+    border-color: rgba(220, 38, 38, 1);
+    box-shadow: 0 0 15px rgba(220, 38, 38, 0.4);
+}
+
+.danger-btn.wipeout:hover {
+    background: rgba(239, 68, 68, 1);
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
+}
+
 /* Main Content */
 .dashboard-content {
     display: grid;
