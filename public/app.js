@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginError = document.getElementById('login-error');
     const refreshBtn = document.getElementById('refresh-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    const wipeoutBtn = document.getElementById('wipeout-btn');
 
     // Check if already logged in
     if (sessionStorage.getItem('adminPassword')) {
@@ -25,6 +26,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     refreshBtn.addEventListener('click', loadData);
+
+    if (wipeoutBtn) {
+        wipeoutBtn.addEventListener('click', handleWipeout);
+    }
+
+    async function handleWipeout() {
+        const confirmText = prompt('WARNING: This will reset all leaderboard stats to 0. Type "WIPEOUT" to confirm.');
+        if (confirmText !== 'WIPEOUT') {
+            alert('Wipeout cancelled.');
+            return;
+        }
+
+        const password = sessionStorage.getItem('adminPassword');
+        const originalBtnHTML = wipeoutBtn.innerHTML;
+        wipeoutBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Wiping...';
+        wipeoutBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/wipeout', {
+                method: 'POST',
+                headers: { 'x-admin-password': password }
+            });
+
+            if (response.ok) {
+                alert('Database wiped out successfully!');
+                loadData(); // Refresh the empty leaderboards
+            } else {
+                const errorData = await response.json();
+                alert('Failed to wipeout: ' + (errorData.error || response.statusText));
+            }
+        } catch (error) {
+            console.error('Failed to wipeout:', error);
+            alert('Error connecting to server.');
+        } finally {
+            wipeoutBtn.innerHTML = originalBtnHTML;
+            wipeoutBtn.disabled = false;
+        }
+    }
 
     async function handleLogin() {
         const password = passwordInput.value;
@@ -120,10 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (index < 3) {
                 tr.className = `rank-${index + 1}`;
             }
-            
-            const walletDisplay = user.wallet_address 
-                ? `${user.wallet_address.substring(0, 6)}...${user.wallet_address.substring(user.wallet_address.length - 4)}` 
-                : 'N/A';
 
             const statFormatted = user[statKey] 
                 ? (statKey === 'online_winnings' ? parseFloat(user[statKey]).toFixed(2) + ' SOL' : user[statKey])
@@ -133,7 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><div class="rank-badge">#${index + 1}</div></td>
                 <td style="font-weight: 500;">${escapeHtml(user.username || 'Unknown')}</td>
                 <td>
-                    ${user.wallet_address ? `<span class="wallet-address" title="${user.wallet_address}">${walletDisplay}</span>` : '<span style="color:#64748b">N/A</span>'}
+                    ${user.wallet_address 
+                        ? `<span class="wallet-address clickable-wallet" style="cursor:pointer;" title="Click to copy" data-wallet="${user.wallet_address}">${user.wallet_address}</span>` 
+                        : '<span style="color:#64748b">N/A</span>'}
                 </td>
                 <td class="stat-val">${statFormatted}</td>
                 <td>
@@ -147,12 +184,21 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.appendChild(tr);
         });
 
-        // Add copy event listeners
+        // Add copy event listeners for the button
         const copyBtns = tbody.querySelectorAll('.copy-action-btn');
         copyBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 const wallet = this.getAttribute('data-wallet');
                 copyToClipboard(wallet, this);
+            });
+        });
+
+        // Add click-to-copy for the wallet text itself
+        const walletTexts = tbody.querySelectorAll('.clickable-wallet');
+        walletTexts.forEach(span => {
+            span.addEventListener('click', function() {
+                const wallet = this.getAttribute('data-wallet');
+                copyToClipboardText(wallet, this);
             });
         });
     }
@@ -167,6 +213,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 buttonElement.innerHTML = originalHTML;
                 buttonElement.classList.remove('copied');
             }, 2000);
+        }).catch(err => {
+            console.error('Could not copy text: ', err);
+            alert('Failed to copy to clipboard');
+        });
+    }
+
+    function copyToClipboardText(text, spanElement) {
+        navigator.clipboard.writeText(text).then(() => {
+            const originalText = spanElement.textContent;
+            spanElement.textContent = 'Copied!';
+            spanElement.style.color = '#10b981'; // accent-green
+            
+            setTimeout(() => {
+                spanElement.textContent = originalText;
+                spanElement.style.color = ''; // reset to default CSS
+            }, 1000);
         }).catch(err => {
             console.error('Could not copy text: ', err);
             alert('Failed to copy to clipboard');
