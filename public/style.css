@@ -364,6 +364,9 @@ tr:hover td:first-child { border-left-color: var(--accent-purple); }
     border-radius: 4px;
     font-size: 0.9rem;
     letter-spacing: 0.5px;
+    word-break: break-all;
+    display: inline-block;
+    max-width: 250px;
 }
 
 .stat-val {
