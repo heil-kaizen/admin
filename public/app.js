@@ -104,8 +104,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function showDashboard() {
         loginScreen.classList.add('hidden');
         setTimeout(() => dashboardScreen.classList.remove('hidden'), 50);
-        loadData();
-        initAdminFeatures();
+        try {
+            loadData();
+            initAdminFeatures();
+        } catch (e) {
+            console.error('Error in showDashboard:', e);
+        }
     }
 
     let statsInterval;
@@ -113,8 +117,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentBanStatus = false;
 
     function initAdminFeatures() {
-        if (statsInterval) clearInterval(statsInterval);
-        fetchStats();
+        console.log("initAdminFeatures called");
+        try {
+            if (statsInterval) clearInterval(statsInterval);
+            fetchStats();
         fetchSolBalance();
         statsInterval = setInterval(fetchStats, 5000);
 
@@ -238,6 +244,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error(err);
             }
         });
+        
+        console.log("initAdminFeatures completed successfully");
+        } catch (e) {
+            console.error('Error in initAdminFeatures:', e);
+        }
     }
 
     async function fetchStats() {
