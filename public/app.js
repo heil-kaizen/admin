@@ -105,6 +105,179 @@ document.addEventListener('DOMContentLoaded', () => {
         loginScreen.classList.add('hidden');
         setTimeout(() => dashboardScreen.classList.remove('hidden'), 50);
         loadData();
+        initAdminFeatures();
+    }
+
+    let statsInterval;
+    let currentSearchedWallet = null;
+    let currentBanStatus = false;
+
+    function initAdminFeatures() {
+        if (statsInterval) clearInterval(statsInterval);
+        fetchStats();
+        fetchSolBalance();
+        statsInterval = setInterval(fetchStats, 5000);
+
+        // Ban System
+        document.getElementById('ban-search-btn').addEventListener('click', async () => {
+            const query = document.getElementById('ban-search').value.trim();
+            if (!query) return;
+            try {
+                const res = await fetch(`/api/admin/search?query=${encodeURIComponent(query)}`, {
+                    headers: { 'x-admin-password': sessionStorage.getItem('adminPassword') }
+                });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    const user = data[0];
+                    currentSearchedWallet = user.wallet_address;
+                    currentBanStatus = user.is_banned;
+                    
+                    document.getElementById('ban-detail-user').textContent = user.username || 'N/A';
+                    document.getElementById('ban-detail-wallet').textContent = user.wallet_address;
+                    document.getElementById('ban-detail-status').textContent = user.is_banned ? 'BANNED' : 'Active';
+                    document.getElementById('ban-detail-status').style.color = user.is_banned ? '#ef4444' : '#10b981';
+                    
+                    const banBtn = document.getElementById('ban-toggle-btn');
+                    banBtn.textContent = user.is_banned ? 'UNBAN USER' : 'BAN USER';
+                    banBtn.className = user.is_banned ? 'primary-btn' : 'danger-btn wipeout';
+                    
+                    document.getElementById('ban-user-details').style.display = 'block';
+                } else {
+                    alert('User not found');
+                    document.getElementById('ban-user-details').style.display = 'none';
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Search failed');
+            }
+        });
+
+        document.getElementById('ban-toggle-btn').addEventListener('click', async () => {
+            if (!currentSearchedWallet) return;
+            const newStatus = !currentBanStatus;
+            try {
+                const res = await fetch('/api/admin/ban', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-password': sessionStorage.getItem('adminPassword') },
+                    body: JSON.stringify({ wallet_address: currentSearchedWallet, is_banned: newStatus })
+                });
+                if (res.ok) {
+                    alert(`User ${newStatus ? 'banned' : 'unbanned'} successfully.`);
+                    document.getElementById('ban-search-btn').click(); // Refresh search
+                } else {
+                    const errorData = await res.json();
+                    alert('Failed: ' + errorData.error);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        // Broadcast
+        document.getElementById('broadcast-btn').addEventListener('click', async () => {
+            const msg = document.getElementById('broadcast-msg').value.trim();
+            if (!msg) return;
+            try {
+                const res = await fetch('/api/admin/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-password': sessionStorage.getItem('adminPassword') },
+                    body: JSON.stringify({ message: msg })
+                });
+                if (res.ok) {
+                    alert('Broadcast sent!');
+                    document.getElementById('broadcast-msg').value = '';
+                } else {
+                    const errorData = await res.json();
+                    alert('Failed: ' + errorData.error);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        // Economy
+        document.getElementById('eco-btn').addEventListener('click', async () => {
+            const wallet = document.getElementById('eco-wallet').value.trim();
+            const amount = parseInt(document.getElementById('eco-amount').value.trim(), 10);
+            if (!wallet || isNaN(amount)) return alert('Enter wallet and amount');
+            
+            try {
+                const res = await fetch('/api/admin/economy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-password': sessionStorage.getItem('adminPassword') },
+                    body: JSON.stringify({ wallet_address: wallet, amount })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`Balance updated successfully! New Balance: ${data.newBalance}`);
+                    document.getElementById('eco-wallet').value = '';
+                    document.getElementById('eco-amount').value = '';
+                } else {
+                    const errorData = await res.json();
+                    alert('Failed: ' + errorData.error);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        document.getElementById('faucet-override-btn').addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/admin/faucet-override', {
+                    method: 'POST',
+                    headers: { 'x-admin-password': sessionStorage.getItem('adminPassword') }
+                });
+                if (res.ok) {
+                    document.getElementById('faucet-status-text').textContent = 'Override Active! (Expires in 1 Hour)';
+                    document.getElementById('faucet-status-text').style.color = '#10b981';
+                } else {
+                    const errorData = await res.json();
+                    alert('Failed: ' + errorData.error);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    }
+
+    async function fetchStats() {
+        try {
+            const res = await fetch('/api/admin/stats', {
+                headers: { 'x-admin-password': sessionStorage.getItem('adminPassword') }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('stat-sockets').textContent = data.active_sockets;
+                document.getElementById('stat-matches').textContent = data.active_matches;
+                
+                const uptime = Math.floor(data.server_uptime);
+                const h = Math.floor(uptime / 3600);
+                const m = Math.floor((uptime % 3600) / 60);
+                const s = uptime % 60;
+                document.getElementById('stat-uptime').textContent = `${h}h ${m}m ${s}s`;
+            }
+        } catch (err) {
+            console.error('Stats fetch error:', err);
+        }
+    }
+
+    async function fetchSolBalance() {
+        try {
+            const cfgRes = await fetch('/api/config');
+            const cfg = await cfgRes.json();
+            
+            if (cfg.treasuryPublicKey && cfg.rpcUrl && window.solanaWeb3) {
+                const connection = new window.solanaWeb3.Connection(cfg.rpcUrl, 'confirmed');
+                const pubKey = new window.solanaWeb3.PublicKey(cfg.treasuryPublicKey);
+                const balance = await connection.getBalance(pubKey);
+                document.getElementById('stat-sol').textContent = (balance / window.solanaWeb3.LAMPORTS_PER_SOL).toFixed(4) + ' SOL';
+            } else {
+                document.getElementById('stat-sol').textContent = 'N/A';
+            }
+        } catch (err) {
+            console.error('SOL balance fetch error:', err);
+            document.getElementById('stat-sol').textContent = 'Error';
+        }
     }
 
     async function loadData() {
